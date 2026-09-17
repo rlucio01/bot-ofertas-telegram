@@ -7,6 +7,7 @@ data/ml_profile). Faça login uma única vez com:
 
     uv run python -m ofertas ml-login
 """
+import json
 import logging
 import os
 import re
@@ -27,6 +28,7 @@ URL_OFERTAS = "https://www.mercadolivre.com.br/ofertas"
 URL_LINKBUILDER = "https://www.mercadolivre.com.br/afiliados/linkbuilder"
 API_CREATELINK = "https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink"
 PERFIL_DIR = DATA_DIR / "ml_profile"
+STATE_FILE = DATA_DIR / "ml_state.json"
 
 _RE_ID = re.compile(r"(MLB-?\d{6,})")
 
@@ -36,6 +38,8 @@ def e_link(url: str) -> bool:
 
 
 def tem_sessao() -> bool:
+    if STATE_FILE.exists() and STATE_FILE.stat().st_size > 50:
+        return True
     return PERFIL_DIR.exists() and any(PERFIL_DIR.iterdir())
 
 
@@ -163,7 +167,7 @@ def _abrir_contexto(pw, headless: bool):
     else:
         kwargs["no_viewport"] = True
     try:
-        return pw.chromium.launch_persistent_context(str(PERFIL_DIR), **kwargs)
+        ctx = pw.chromium.launch_persistent_context(str(PERFIL_DIR), **kwargs)
     except Exception as e:
         msg = str(e).lower()
         if "chrome" not in msg and "executable" not in msg and "not found" not in msg:
@@ -171,7 +175,20 @@ def _abrir_contexto(pw, headless: bool):
         log.warning("Google Chrome não encontrado (%s); usando Chromium do projeto — "
                     "o login no ML pode ser recusado", type(e).__name__)
         kwargs.pop("channel", None)
-        return pw.chromium.launch_persistent_context(str(PERFIL_DIR), **kwargs)
+        ctx = pw.chromium.launch_persistent_context(str(PERFIL_DIR), **kwargs)
+
+    # Injeta cookies portáveis de ml_state.json (necessário no Linux/Docker onde DPAPI não existe)
+    if STATE_FILE.exists():
+        try:
+            with open(STATE_FILE, encoding="utf-8") as f:
+                dados = json.load(f)
+                cookies = dados.get("cookies", [])
+                if cookies:
+                    ctx.add_cookies(cookies)
+        except Exception as e:
+            log.warning("Falha ao injetar cookies de %s: %s", STATE_FILE, e)
+
+    return ctx
 
 
 def _achar_chrome() -> str:
@@ -231,8 +248,24 @@ def ml_login() -> None:
     proc = subprocess.Popen([chrome, f"--user-data-dir={PERFIL_DIR}", "--no-first-run",
                              "--no-default-browser-check", URL_LINKBUILDER])
     proc.wait()
-    print(f"✅ Perfil salvo em {PERFIL_DIR} — o bot usa essa sessão sozinho daqui pra frente.")
+    salvar_sessao_json()
+    print(f"✅ Perfil salvo em {PERFIL_DIR} e exportado para {STATE_FILE} — o bot usa essa sessão sozinho daqui pra frente.")
     print('   Teste com: uv run python -m ofertas converter "<link de produto do ML>"')
+
+
+def salvar_sessao_json() -> bool:
+    """Extrai os cookies da sessão ativa em PERFIL_DIR e salva em ml_state.json (portável para Linux/Docker)."""
+    from playwright.sync_api import sync_playwright
+    try:
+        with sync_playwright() as pw:
+            ctx = _abrir_contexto(pw, headless=True)
+            ctx.storage_state(path=str(STATE_FILE))
+            ctx.close()
+            log.info("Sessão do Mercado Livre exportada para %s", STATE_FILE)
+            return True
+    except Exception as e:
+        log.warning("Não foi possível exportar storage_state do ML: %s", e)
+        return False
 
 
 def _criar_links_api(page, urls: list[str], etiqueta: str) -> list[str]:
@@ -293,6 +326,10 @@ def gerar_links_afiliado(ofertas: list[Oferta]) -> None:
                 for o, link in zip(lote, links):
                     o.url_afiliado = link
             log.info("Mercado Livre: %d links de afiliado gerados", len(pendentes))
+            try:
+                ctx.storage_state(path=str(STATE_FILE))
+            except Exception as e:
+                log.debug("Erro ao renovar ml_state.json: %s", e)
         finally:
             ctx.close()
 

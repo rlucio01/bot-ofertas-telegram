@@ -122,6 +122,8 @@ def verificar() -> list[str]:
     if not tem_navegador:
         pendencias.append("Chromium do Playwright (rode: uv run python -m ofertas instalar-navegador)")
     perfil_ml = DATA_DIR / "ml_profile"
-    if not (perfil_ml.exists() and any(perfil_ml.iterdir())):
+    state_ml = DATA_DIR / "ml_state.json"
+    tem_sessao_ml = (state_ml.exists() and state_ml.stat().st_size > 50) or (perfil_ml.exists() and any(perfil_ml.iterdir()))
+    if not tem_sessao_ml:
         pendencias.append("Sessão do Mercado Livre (rode: uv run python -m ofertas ml-login)")
     return pendencias

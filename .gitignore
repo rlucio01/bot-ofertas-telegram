@@ -3,3 +3,14 @@
 data/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.zip
+*.tar
+*.gz
+*.rar
+*.log
+.DS_Store
+Thumbs.db
+deploy_vps.py
+

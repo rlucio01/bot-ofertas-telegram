@@ -172,7 +172,8 @@ def status() -> dict:
         or (Path("/ms-playwright").exists() and bool(list(Path("/ms-playwright").glob("chromium-*"))))
     )
     perfil = DATA_DIR / "ml_profile"
-    tem_sessao_ml = perfil.exists() and any(perfil.iterdir())
+    state_ml = DATA_DIR / "ml_state.json"
+    tem_sessao_ml = (state_ml.exists() and state_ml.stat().st_size > 50) or (perfil.exists() and any(perfil.iterdir()))
     return {
         "bot_rodando": bot.rodando(),
         "acao_rodando": acao.rotulo if acao.rodando() else "",

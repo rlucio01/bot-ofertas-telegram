@@ -108,6 +108,14 @@ def cmd_ml_login(_):
     mercadolivre.ml_login()
 
 
+def cmd_ml_export(_):
+    from .sources import mercadolivre
+    if mercadolivre.salvar_sessao_json():
+        print("✅ Sessão do Mercado Livre exportada para data/ml_state.json com sucesso!")
+    else:
+        print("❌ Falha ao exportar sessão.")
+
+
 def cmd_testar(args):
     if args.fonte == "ml":
         from .sources import mercadolivre
@@ -158,6 +166,7 @@ def main():
 
     sub.add_parser("instalar-navegador", help="baixa o Chromium usado pelo Linkbuilder (fica em data/)").set_defaults(fn=cmd_instalar_navegador)
     sub.add_parser("ml-login", help="login único no Mercado Livre (salva a sessão)").set_defaults(fn=cmd_ml_login)
+    sub.add_parser("ml-export", help="exporta a sessão ativa do ML para data/ml_state.json").set_defaults(fn=cmd_ml_export)
 
     pt = sub.add_parser("testar", help="testa uma fonte sem postar nada")
     pt.add_argument("fonte", choices=["ml", "shopee", "amazon"])
