@@ -11,6 +11,12 @@ Um bot autônomo, modular e **100% híbrido** para Telegram que garimpa as melho
 
 > 💰 **100% dos seus ganhos**: O bot não tem intermediários nem taxas. Todas as comissões geradas pelas vendas vão direto para as suas próprias contas de afiliado das plataformas.
 
+<p align="center">
+  <img src="docs/images/demonstracao-post-telegram.png" alt="Demonstração de Postagem no Telegram" width="520">
+  <br>
+  <em>Exemplo real de oferta garimpada e postada automaticamente no canal com foto, desconto e botão de afiliado</em>
+</p>
+
 ---
 
 ## 🌟 Por que este bot é Híbrido?
