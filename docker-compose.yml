@@ -1,0 +1,23 @@
+version: "3.8"
+
+services:
+  bot-ofertas:
+    build: .
+    image: bot-ofertas-telegram:latest
+    container_name: bot-ofertas-telegram
+    restart: unless-stopped
+    # shm_size generoso para o Chromium headless do Playwright não travar
+    shm_size: "1gb"
+    env_file:
+      - .env
+    environment:
+      # Modo: "run" (bot puro 24x7 no terminal) ou "painel" (painel web na porta 8481 + bot automático)
+      - APP_MODE=run
+      - TZ=America/Sao_Paulo
+    volumes:
+      # Persistência do banco SQLite (ofertas.db), sessão do ML (ml_profile) e nichos (nichos.json)
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    ports:
+      # Descomente para acessar o painel localmente em http://localhost:8481 quando APP_MODE=painel
+      - "8481:8481"

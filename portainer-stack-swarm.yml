@@ -1,0 +1,90 @@
+version: "3.8"
+
+# ==============================================================================
+# STACK DOCKER SWARM PARA PORTAINER + TRAEFIK (VPS UBUNTU 24)
+# ==============================================================================
+# Cole este arquivo no Portainer: Stacks > Add stack > Web editor.
+# Certifique-se de preencher as variáveis de ambiente no Portainer.
+# ==============================================================================
+
+services:
+  bot-ofertas:
+    # Se você fizer build local na VPS ou subir para o Docker Hub / Registry:
+    # Exemplo: image: seuusuario/bot-ofertas-telegram:latest
+    image: bot-ofertas-telegram:latest
+    
+    # Se estiver rodando o Portainer na mesma máquina do build ou usando Git repository:
+    # build: .
+
+    environment:
+      # Modo de operação:
+      # "run"    -> Roda apenas o bot 24x7 (recomendado se não for usar o painel web)
+      # "painel" -> Sobe o painel web + liga o bot automaticamente em background
+      - APP_MODE=${APP_MODE:-painel}
+      - AUTO_START_BOT=true
+      - PAINEL_HOST=0.0.0.0
+      - PAINEL_PORT=8481
+      - TZ=America/Sao_Paulo
+
+      # Credenciais e IDs do Telegram
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - TELEGRAM_OWNER_ID=${TELEGRAM_OWNER_ID}
+
+      # Afiliados
+      - ML_ETIQUETA=${ML_ETIQUETA}
+      - AMAZON_TAG=${AMAZON_TAG}
+      - AMAZON_CREDENTIAL_ID=${AMAZON_CREDENTIAL_ID:-}
+      - AMAZON_CREDENTIAL_SECRET=${AMAZON_CREDENTIAL_SECRET:-}
+      - SHOPEE_APP_ID=${SHOPEE_APP_ID:-}
+      - SHOPEE_APP_SECRET=${SHOPEE_APP_SECRET:-}
+
+    volumes:
+      # Caminho persistente no host da VPS onde ficam a sessão do Mercado Livre e o SQLite.
+      # Crie a pasta /opt/bot-ofertas/data na VPS e transfira seus dados para ela.
+      - /opt/bot-ofertas/data:/app/data
+      - /opt/bot-ofertas/config.yaml:/app/config.yaml:ro
+
+    networks:
+      # Conecta à rede overlay do Traefik (ajuste para o nome da sua rede, ex: traefik-public ou proxy)
+      - traefik-public
+
+    deploy:
+      # IMPORTANTE NO TELEGRAM: exatamente 1 réplica para evitar conflito de polling getUpdates!
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 5
+        window: 120s
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1536M
+        reservations:
+          cpus: "0.2"
+          memory: 256M
+
+      # Roteamento através do Traefik no Docker Swarm
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=traefik-public"
+        
+        # Router HTTPS (altere o domínio conforme o seu subdomínio)
+        - "traefik.http.routers.botofertas.rule=Host(`${DOMAIN:-ofertas.seudominio.com}`)"
+        - "traefik.http.routers.botofertas.entrypoints=websecure"
+        - "traefik.http.routers.botofertas.tls=true"
+        - "traefik.http.routers.botofertas.tls.certresolver=${CERT_RESOLVER:-letsencrypt}"
+        
+        # Porta interna do serviço
+        - "traefik.http.services.botofertas.loadbalancer.server.port=8481"
+
+        # (Opcional - Recomendado) Proteção por senha do Painel na Web via Traefik BasicAuth
+        # Gere seu hash com: echo $(htpasswd -nb admin sua_senha) | sed -e s/\\$/\\$\\$/g
+        # Descomente as duas linhas abaixo para ativar:
+        # - "traefik.http.middlewares.botofertas-auth.basicauth.users=${BASIC_AUTH_USERS:-admin:$$apr1$$xyz}"
+        # - "traefik.http.routers.botofertas.middlewares=botofertas-auth"
+
+networks:
+  traefik-public:
+    external: true

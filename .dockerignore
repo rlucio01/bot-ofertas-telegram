@@ -1,0 +1,12 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+data/pw-browsers
+data/ml_profile
+data/ofertas.db
+data/*.html
+*.bat

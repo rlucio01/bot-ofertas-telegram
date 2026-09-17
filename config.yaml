@@ -1,0 +1,58 @@
+# Configuração do bot de ofertas (o que não é segredo fica aqui; segredos vão no .env)
+
+geral:
+  intervalo_minutos: 45        # de quanto em quanto tempo buscar ofertas novas
+  max_posts_por_ciclo: 3       # máximo de ofertas postadas por ciclo
+  espacamento_segundos: 120    # pausa entre um post e outro no mesmo ciclo
+  nao_repetir_dias: 7          # não repostar o mesmo produto dentro desse prazo
+  horario_ativo: "08:00-23:00" # só posta nesse intervalo (hora do PC); "" = 24h
+
+filtros:
+  desconto_minimo: 25          # % mínimo de desconto para postar (ofertas automáticas)
+  preco_minimo: 0              # 0 = sem limite
+  preco_maximo: 0              # 0 = sem limite
+  palavras_bloqueadas: []      # ex: [capinha, película] — ignora ofertas com essas palavras
+
+# Por padrão o bot pega ofertas de TODAS as categorias.
+# JEITO FÁCIL de escolher um nicho: use o seletor "Categorias do canal" no PAINEL
+# (marca com o mouse — substitui as listas abaixo, sem editar este arquivo).
+# JEITO MANUAL/AVANÇADO: preencha as listas abaixo (veja os exemplos comentados).
+fontes:
+  mercadolivre:
+    ativa: true
+    paginas: 1                 # páginas de mercadolivre.com.br/ofertas por categoria (~48 itens cada)
+    categorias: {}             # vazio = todas as categorias.
+    # Para um nicho, troque por (id: nome). Exemplos de categorias do Mercado Livre:
+    #   MLB1648: Informática
+    #   MLB1000: Eletrônicos, Áudio e Vídeo
+    #   MLB1051: Celulares e Telefones
+    #   MLB1276: Esportes e Fitness
+    #   MLB1574: Casa, Móveis e Decoração
+    #   MLB1430: Roupas e Acessórios
+    #   MLB1132: Brinquedos e Hobbies
+    #   MLB1246: Beleza e Cuidado Pessoal
+
+  amazon:
+    ativa: true
+    paginas: 1                 # páginas por listagem de ofertas (~24-48 itens cada)
+    requisicoes_por_ciclo: 4   # rodízio: quantas páginas de busca por ciclo (0 = todas de uma vez)
+    departamentos: {}          # vazio = ofertas de todas as categorias.
+    # Para um nicho, troque por (alias: nome). Exemplos de departamentos da Amazon:
+    #   electronics: Eletrônicos
+    #   computers: Computadores e Informática
+    #   home: Casa
+    #   kitchen: Cozinha
+    #   sporting: Esportes
+    #   toys: Brinquedos
+    #   beauty: Beleza
+    #   fashion: Moda
+    buscas: []                 # termos livres extras, ex: [echo dot, air fryer]
+
+  shopee:
+    ativa: true
+    limite: 40                 # total de produtos pedidos à Open API por ciclo
+    buscas: []                 # vazio = ofertas em destaque da Shopee (todas categorias).
+    # Para um nicho, liste palavras-chave, ex:
+    #   - fone bluetooth
+    #   - tênis
+    #   - panela

@@ -1,0 +1,48 @@
+================================================================
+  BOT DE OFERTAS PARA TELEGRAM  —  COMECE AQUI
+================================================================
+
+Este bot posta promocoes (Mercado Livre, Shopee, Amazon) no seu
+canal do Telegram com os SEUS links de afiliado.
+
+----------------------------------------------------------------
+  JEITO FACIL (recomendado): PAINEL GRAFICO
+----------------------------------------------------------------
+
+  >>> De 2 cliques no arquivo  PAINEL.bat  <<<
+
+Ele prepara tudo sozinho e abre um painel no seu navegador, onde
+voce:
+  - preenche a configuracao em formulario (sem mexer em arquivos);
+  - descobre os IDs do Telegram com um botao;
+  - instala o navegador e faz o login do Mercado Livre por botoes;
+  - liga/desliga o bot e ve tudo funcionando ao vivo.
+
+Na primeira vez ele pode pedir para instalar o "uv" e reabrir o
+PAINEL.bat - so seguir o que aparecer na tela.
+
+Antes de comecar voce precisa de:
+  - Um bot criado no @BotFather (Telegram) -> guarde o TOKEN.
+  - Um canal no Telegram com o seu bot como ADMINISTRADOR.
+  - Suas contas de afiliado (Mercado Livre / Amazon / Shopee).
+
+O passo a passo completo, com telas, esta no arquivo README.md.
+
+----------------------------------------------------------------
+  DEU ERRO "Failed to spawn: python"?
+----------------------------------------------------------------
+E o Smart App Control do Windows 11. Aperte a tecla Windows,
+digite "Controle inteligente de aplicativos", abra, marque
+DESATIVADO, confirme e reinicie o PC. (Nao desliga o antivirus.)
+
+----------------------------------------------------------------
+  IMPORTANTE
+----------------------------------------------------------------
+- Use as SUAS proprias contas de afiliado (as comissoes vao para
+  quem configurar).
+- Avise no seu canal que sao links de afiliado (exigencia dos
+  programas, principalmente Amazon).
+- NUNCA compartilhe o arquivo .env (ele guarda suas senhas).
+
+Duvidas? Veja o README.md ou os comentarios do video.
+================================================================
