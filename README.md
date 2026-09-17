@@ -4,6 +4,7 @@
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?logo=docker&logoColor=white)](https://www.docker.com/)
 [![Docker Swarm](https://img.shields.io/badge/docker%20swarm-compatible-blue?logo=docker)](https://docs.docker.com/engine/swarm/)
 [![Telegram](https://img.shields.io/badge/Telegram-Bot%20API-blue?logo=telegram)](https://core.telegram.org/bots/api)
+[![Canal de Ofertas](https://img.shields.io/badge/Canal%20de%20Ofertas-t.me%2Fofertasdolucio-2CA5E0?logo=telegram&logoColor=white)](https://t.me/ofertasdolucio)
 [![Playwright](https://img.shields.io/badge/playwright-chromium-green.svg?logo=playwright)](https://playwright.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -16,6 +17,10 @@ Um bot autônomo, modular e **100% híbrido** para Telegram que garimpa as melho
   <br>
   <em>Exemplo real de oferta garimpada e postada automaticamente no canal com foto, desconto e botão de afiliado</em>
 </p>
+
+> 📢 **Veja o bot em ação na prática!**  
+> Criamos um canal demonstrativo no Telegram gerado 100% por este bot para você conferir a velocidade e a qualidade das postagens ao vivo:  
+> 👉 **[Entre no canal Ofertas do Lúcio (t.me/ofertasdolucio)](https://t.me/ofertasdolucio)** para experimentar e acompanhar!
 
 ---
 
@@ -318,6 +323,15 @@ bot-ofertas-telegram/
   > *"Como participante dos programas de afiliados do Mercado Livre, Shopee e Amazon, podemos receber uma comissão pelas compras qualificadas realizadas através dos links postados, sem nenhum custo adicional para você."*
 * **Segurança de Segredos**: Nunca cometa o arquivo `.env` nem a pasta `data/`. Eles estão devidamente incluídos no `.gitignore`.
 * **Réplica Única no Docker Swarm**: Devido à arquitetura de *long-polling* do Telegram (`getUpdates`), execute sempre com `replicas: 1` para evitar erros de concorrência (`HTTP 409 Conflict`).
+
+---
+
+## 👏 Créditos e Agradecimentos
+
+Este projeto foi inspirado e baseado no projeto original e tutorial em vídeo de **Kenzo Nakagawa**.
+
+* 📺 **Tutorial em Vídeo (Instalação Local no PC)**: [Assista ao vídeo no YouTube](https://youtu.be/Wjt_LMtGftI?si=5ruxvaG5ORmTT5Dj)
+* Deixamos aqui nosso agradecimento e os devidos créditos ao Kenzo por compartilhar a base inicial da automação local! A partir desse conceito, evoluímos a solução para uma arquitetura **100% híbrida**, adicionando suporte completo a **Linux, Docker, Docker Swarm com Traefik (VPS 24x7) e persistência inteligente de sessão via `ml_state.json`**.
 
 ---
 
