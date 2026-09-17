@@ -171,9 +171,9 @@ E atualize a stack no Portainer!
 O Mercado Livre mantém a sessão ativa por semanas/meses. Se um dia ela expirar:
 1. No seu computador local, rode: `uv run python -m ofertas ml-login`.
 2. Faça o login e feche o navegador.
-3. Envie a pasta `data/ml_profile` atualizada para a VPS:
+3. Envie o arquivo leve de sessão (`ml_state.json`, 9 KB) para a VPS:
    ```powershell
-   scp -r data/ml_profile usuario@ip_da_vps:/opt/bot-ofertas/data/
+   scp data/ml_state.json usuario@ip_da_vps:/opt/bot-ofertas/data/
    ```
 4. Reinicie o serviço no Portainer.
 
