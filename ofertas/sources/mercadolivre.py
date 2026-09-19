@@ -334,45 +334,209 @@ def gerar_links_afiliado(ofertas: list[Oferta]) -> None:
             ctx.close()
 
 
-def converter(url: str) -> Oferta:
-    """Link de produto -> Oferta com dados da página + link de afiliado."""
-    url = url.split("#")[0]
-    if "meli.la/" in url:  # link de afiliado encurtado: expande até o produto
+def _extrair_pdp_html(html: str) -> dict:
+    soup = BeautifulSoup(html, "lxml")
+
+    el = soup.select_one("h1.ui-pdp-title") or soup.select_one("meta[property='og:title']")
+    titulo = (el.get_text(strip=True) if el.name != "meta" else el.get("content")) if el else None
+
+    el = soup.select_one("meta[property='og:image']") or soup.select_one(".ui-pdp-gallery__figure img, img.ui-pdp-image")
+    imagem = (el.get("content") if el.name == "meta" else (el.get("data-src") or el.get("src"))) if el else None
+    if imagem and imagem.startswith("data:"):
+        imagem = None
+
+    preco = None
+    el_meta = soup.select_one("meta[itemprop='price']")
+    if el_meta and el_meta.get("content"):
         try:
-            url = sessao().get(url, allow_redirects=True, timeout=20).url.split("#")[0]
+            preco = float(el_meta["content"])
+        except ValueError:
+            pass
+    if preco is None:
+        bloco = soup.select_one(".ui-pdp-price__second-line, .ui-pdp-price")
+        if bloco:
+            fracao = bloco.select_one(".andes-money-amount__fraction")
+            centavos = bloco.select_one(".andes-money-amount__cents")
+            if fracao:
+                texto = fracao.get_text(strip=True) + ("," + centavos.get_text(strip=True) if centavos else "")
+                preco = parse_preco_br(texto)
+
+    preco_original = None
+    bloco_antigo = soup.select_one(".ui-pdp-price__original-value, s.andes-money-amount--previous")
+    if bloco_antigo:
+        fracao = bloco_antigo.select_one(".andes-money-amount__fraction")
+        centavos = bloco_antigo.select_one(".andes-money-amount__cents")
+        if fracao:
+            texto = fracao.get_text(strip=True) + ("," + centavos.get_text(strip=True) if centavos else "")
+            preco_original = parse_preco_br(texto)
+    if preco is not None and preco_original is not None and preco_original <= preco:
+        preco_original = None
+
+    desconto = None
+    el = soup.select_one(".ui-pdp-price__second-line .andes-money-amount__discount, span.ui-pdp-price__discount")
+    if el:
+        m = re.search(r"(\d+)\s*%", el.get_text())
+        desconto = int(m.group(1)) if m else None
+
+    partes = []
+    el_r = soup.select_one(".ui-pdp-review__rating, .ui-pdp-reviews__rating")
+    el_count = soup.select_one(".ui-pdp-review__amount")
+    if el_r:
+        txt = "⭐ " + el_r.get_text(strip=True)
+        if el_count:
+            txt += f" ({el_count.get_text(strip=True).strip('()')})"
+        partes.append(txt)
+    if soup.find(string=re.compile(r"Frete grátis", re.I)):
+        partes.append("🚚 Frete grátis")
+    el_pix = soup.select_one(".ui-pdp-price__unit-description")
+    if el_pix and "pix" in el_pix.get_text().lower():
+        partes.append("💠 no Pix")
+
+    return {
+        "titulo": titulo,
+        "imagem": imagem,
+        "preco": preco,
+        "preco_original": preco_original,
+        "desconto_pct": desconto,
+        "extra": " · ".join(partes) or None,
+    }
+
+
+def _criar_link_com_dados(page, url: str, etiqueta: str) -> dict:
+    """Chama a API do Linkbuilder para uma URL e retorna o dict completo (short_url, list_url, etc)."""
+    r = page.evaluate(
+        """async ({api, urls, tag}) => {
+            const resp = await fetch(api, {
+                method: 'POST',
+                headers: {'content-type': 'application/json'},
+                body: JSON.stringify({urls, tag}),
+            });
+            const corpo = await resp.text();
+            try { return {http: resp.status, dados: JSON.parse(corpo)}; }
+            catch (e) { return {http: resp.status, texto: corpo.slice(0, 300)}; }
+        }""",
+        {"api": API_CREATELINK, "urls": [url], "tag": etiqueta},
+    )
+    if r.get("http") != 200 or not r.get("dados"):
+        raise RuntimeError(f"createLink respondeu HTTP {r.get('http')}: {r.get('texto', '')}")
+    itens = (r["dados"].get("urls")) or []
+    if not itens:
+        raise RuntimeError(f"createLink devolveu resposta vazia: {r['dados']}")
+    return itens[0]
+
+
+def _titulo_do_link(url: str) -> str:
+    """Gera um título legível a partir do slug da URL do produto."""
+    m = re.search(r"mercadolivre\.com\.br/([a-zA-Z0-9\-]+)/p/", url)
+    if not m:
+        m = re.search(r"mercadolivre\.com\.br/([a-zA-Z0-9\-]+)", url)
+    if m:
+        slug = m.group(1)
+        slug = re.sub(r"^MLB-?\d+-?", "", slug)
+        palavras = [p.capitalize() for p in slug.split("-") if p]
+        if palavras:
+            return " ".join(palavras)
+    return "Oferta Mercado Livre"
+
+
+def converter(url: str) -> Oferta:
+    """Link de produto -> Oferta com dados da página + link de afiliado via Playwright."""
+    from playwright.sync_api import sync_playwright
+
+    url_limpa = url.split("#")[0]
+    if "meli.la/" in url_limpa:
+        try:
+            url_limpa = sessao().get(url_limpa, allow_redirects=True, timeout=20).url.split("#")[0]
         except Exception as e:
             log.warning("Não consegui expandir o link meli.la: %s", e)
-    titulo = preco = preco_original = imagem = None
-    try:
-        r = sessao().get(url, timeout=25)
-        soup = BeautifulSoup(r.text, "lxml")
-        el = soup.select_one("h1.ui-pdp-title")
-        titulo = el.get_text(strip=True) if el else None
-        el = soup.select_one('meta[property="og:image"]')
-        imagem = el.get("content") if el else None
-        el = soup.select_one('meta[itemprop="price"]')
-        if el and el.get("content"):
-            preco = float(el["content"])
-        else:
-            el = soup.select_one(".ui-pdp-price__second-line .andes-money-amount__fraction")
-            preco = parse_preco_br(el.get_text()) if el else None
-        el = soup.select_one("s.andes-money-amount--previous .andes-money-amount__fraction")
-        preco_original = parse_preco_br(el.get_text()) if el else None
-    except Exception as e:
-        log.warning("Não consegui ler a página do produto: %s", e)
 
-    m = _RE_ID.search(url)
-    oferta = Oferta(
-        plataforma="mercadolivre",
-        id_produto=m.group(1).replace("-", "") if m else url.rstrip("/").rsplit("/", 1)[-1][:40],
-        titulo=titulo or "Oferta Mercado Livre",
-        url_afiliado="",
-        url_produto=url.split("?")[0],
-        preco=preco,
-        preco_original=preco_original,
-        imagem=imagem,
-    )
-    gerar_links_afiliado([oferta])
-    if not oferta.url_afiliado:
-        raise RuntimeError("Linkbuilder não devolveu o link de afiliado")
-    return oferta
+    url_produto = url_limpa.split("?")[0]
+    m = _RE_ID.search(url_produto) or _RE_ID.search(url)
+    id_produto = m.group(1).replace("-", "") if m else url_produto.rstrip("/").rsplit("/", 1)[-1][:40]
+
+    if not tem_sessao():
+        raise RuntimeError("Sessão do ML não encontrada — rode: uv run python -m ofertas ml-login")
+    if not config.ml_etiqueta:
+        raise RuntimeError("ML_ETIQUETA não configurada no .env")
+
+    with sync_playwright() as pw:
+        ctx = _abrir_contexto(pw, headless=True)
+        page = ctx.pages[0] if ctx.pages else ctx.new_page()
+        try:
+            # 1. Abre a página do Linkbuilder (sessão garantida)
+            page.goto(URL_LINKBUILDER, wait_until="domcontentloaded", timeout=30000)
+            if "login" in page.url or "registration" in page.url:
+                raise RuntimeError("Sessão do ML expirou — rode de novo: uv run python -m ofertas ml-login")
+            page.wait_for_timeout(1500)
+
+            # 2. Gera o link de afiliado com o URL limpo do produto
+            item_info = _criar_link_com_dados(page, url_produto, config.ml_etiqueta)
+            short_url = item_info.get("short_url")
+            if not short_url:
+                msg_erro = item_info.get("message") or "Linkbuilder não devolveu o short_url"
+                raise RuntimeError(msg_erro)
+
+            list_url = item_info.get("list_url")
+
+            # 3. Extração dos dados do produto:
+            # Primeiro, tenta ler o card completo do produto pela página da lista de afiliados (wishlist hub),
+            # que nunca é bloqueada por captcha e contém o card do produto com foto, preço e desconto!
+            oferta = None
+            if list_url:
+                try:
+                    page.goto(list_url, wait_until="domcontentloaded", timeout=25000)
+                    soup = BeautifulSoup(page.content(), "lxml")
+                    cards = soup.select("div.poly-card")
+                    for c in cards:
+                        parsed = _parse_card(c)
+                        if parsed and (not id_produto or id_produto in parsed.url_produto or id_produto in parsed.id_produto):
+                            oferta = parsed
+                            break
+                    if not oferta and cards:
+                        oferta = _parse_card(cards[0])
+                except Exception as e:
+                    log.warning("Falha ao ler dados da list_url do ML (%s)", e)
+
+            # Se não conseguiu ler da list_url, tenta acessar a página do produto diretamente
+            if not oferta or not oferta.imagem:
+                try:
+                    page.goto(url_produto, wait_until="domcontentloaded", timeout=25000)
+                    if "captcha" not in page.url and "verification" not in page.url:
+                        dados = _extrair_pdp_html(page.content())
+                        if dados.get("titulo"):
+                            oferta = Oferta(
+                                plataforma="mercadolivre",
+                                id_produto=id_produto,
+                                titulo=dados["titulo"],
+                                url_afiliado=short_url,
+                                url_produto=url_produto,
+                                preco=dados["preco"],
+                                preco_original=dados["preco_original"],
+                                desconto_pct=dados["desconto_pct"],
+                                imagem=dados["imagem"],
+                                extra=dados["extra"],
+                            )
+                except Exception as e:
+                    log.debug("Acesso direto ao produto falhou (%s)", e)
+
+            if not oferta:
+                titulo = _titulo_do_link(url_limpa)
+                oferta = Oferta(
+                    plataforma="mercadolivre",
+                    id_produto=id_produto,
+                    titulo=titulo,
+                    url_afiliado=short_url,
+                    url_produto=url_produto,
+                )
+            else:
+                oferta.url_afiliado = short_url
+                oferta.url_produto = url_produto
+
+            try:
+                ctx.storage_state(path=str(STATE_FILE))
+            except Exception as e:
+                log.debug("Erro ao renovar ml_state.json: %s", e)
+
+            return oferta
+        finally:
+            ctx.close()

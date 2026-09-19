@@ -356,7 +356,7 @@ def converter(url: str) -> Oferta:
             motivo = "conta ainda não elegível" if "AssociateNotEligible" in str(e) else str(e)
             log.warning("Creators API indisponível (%s); usando link com tag", motivo)
 
-    titulo, preco, preco_original, imagem = _detalhes(f"https://www.amazon.com.br/dp/{asin}")
+    titulo, preco, preco_original, desconto, imagem, extra = _detalhes(f"https://www.amazon.com.br/dp/{asin}")
     return Oferta(
         plataforma="amazon",
         id_produto=asin,
@@ -365,32 +365,113 @@ def converter(url: str) -> Oferta:
         url_produto=url,
         preco=preco,
         preco_original=preco_original,
+        desconto_pct=desconto,
         imagem=imagem,
+        extra=extra,
     )
 
 
+def _parse_detalhes_html(html: str):
+    soup = BeautifulSoup(html, "lxml")
+
+    el = soup.select_one("#productTitle") or soup.select_one("meta[name='title']") or soup.select_one("meta[property='og:title']")
+    titulo = (el.get_text(strip=True) if el.name != "meta" else el.get("content")) if el else None
+
+    # Preço atual (exclui preços riscados .a-text-price)
+    el = soup.select_one(
+        "#corePriceDisplay_desktop_feature_div .a-price:not(.a-text-price) .a-offscreen, "
+        "#corePrice_desktop .a-price:not(.a-text-price) .a-offscreen, "
+        ".apexPriceToPay .a-offscreen, "
+        "#priceblock_dealprice, #priceblock_ourprice, "
+        ".a-price:not(.a-text-price) .a-offscreen"
+    )
+    preco = parse_preco_br(el.get_text()) if el else None
+
+    # Preço original (riscado / De:)
+    el = soup.select_one(
+        "#corePriceDisplay_desktop_feature_div .a-price.a-text-price[data-a-strike='true'] .a-offscreen, "
+        "#corePriceDisplay_desktop_feature_div .a-text-price .a-offscreen, "
+        "#corePrice_desktop .a-text-price .a-offscreen, "
+        "span.a-price.a-text-price span.a-offscreen, "
+        ".basisPrice .a-offscreen, "
+        "span[data-a-strike='true'] .a-offscreen, "
+        ".a-price.a-text-price .a-offscreen, "
+        ".priceBlockStrikePriceString"
+    )
+    preco_original = parse_preco_br(el.get_text()) if el else None
+    if preco is not None and preco_original is not None and preco_original <= preco:
+        preco_original = None
+
+    # Desconto percentual
+    desconto = None
+    el_desc = soup.select_one(".savingsPercentage, .reinventPriceSavingsPercentageMargin")
+    if el_desc:
+        m = re.search(r"(\d+)\s*%", el_desc.get_text())
+        if m:
+            desconto = int(m.group(1))
+
+    # Imagem do produto em alta resolução
+    el = soup.select_one("#landingImage, #imgBlkFront") or soup.select_one("meta[property='og:image']")
+    imagem = None
+    if el:
+        if el.name == "meta":
+            imagem = el.get("content")
+        else:
+            imagem = el.get("data-old-hires") or el.get("src")
+    imagem = _imagem_grande(imagem) if imagem else None
+
+    # Extras (avaliação, Prime, cupom)
+    partes = []
+    el_r = soup.select_one("#acrPopover .a-icon-alt, span[data-hook='rating-out-of-text']")
+    if el_r:
+        m = re.search(r"([\d,]+)", el_r.get_text())
+        if m:
+            partes.append(f"⭐ {m.group(1)}")
+    if soup.select_one("i.a-icon-prime"):
+        partes.append("Prime")
+    for rotulo, selo in (("Mais vendido", "🏆 Mais vendido"), ("Escolha da Amazon", "✔️ Escolha da Amazon")):
+        if rotulo in soup.get_text():
+            partes.append(selo)
+    m_cupom = re.search(r"Cupom de (R\$\s?[\d.,]+|\d+%)", soup.get_text())
+    if m_cupom:
+        partes.append(f"🎟 Cupom de {m_cupom.group(1)}")
+
+    extra = " · ".join(partes) or None
+
+    return titulo, preco, preco_original, desconto, imagem, extra
+
+
 def _detalhes(url: str):
-    """Scraping leve da página do produto; se a Amazon bloquear, segue sem os dados."""
+    """Scraping da página do produto (requests leve com fallback para Playwright se houver bloqueio/captcha)."""
+    # 1. Tentativa rápida via requests
     try:
-        r = _sessao().get(url, timeout=25)
-        if r.status_code != 200 or "captcha" in r.text[:3000].lower():
-            log.warning("Amazon não liberou a página (%s) — postando sem título/preço", r.status_code)
-            return None, None, None, None
-        soup = BeautifulSoup(r.text, "lxml")
-
-        el = soup.select_one("#productTitle")
-        titulo = el.get_text(strip=True) if el else None
-
-        el = soup.select_one("#corePriceDisplay_desktop_feature_div .a-price .a-offscreen, .a-price .a-offscreen")
-        preco = parse_preco_br(el.get_text()) if el else None
-
-        el = soup.select_one(".basisPrice .a-offscreen, span[data-a-strike='true'] .a-offscreen")
-        preco_original = parse_preco_br(el.get_text()) if el else None
-
-        el = soup.select_one("#landingImage")
-        imagem = (el.get("data-old-hires") or el.get("src")) if el else None
-
-        return titulo, preco, preco_original, imagem
+        r = _sessao().get(url, timeout=20)
+        if r.status_code == 200 and "captcha" not in r.text[:3000].lower():
+            titulo, preco, preco_orig, desc, img, extra = _parse_detalhes_html(r.text)
+            if titulo:
+                return titulo, preco, preco_orig, desc, img, extra
     except Exception as e:
-        log.warning("Falha ao ler detalhes na Amazon: %s", e)
-        return None, None, None, None
+        log.debug("Requests rápido na Amazon falhou (%s); tentando Playwright", e)
+
+    # 2. Fallback via Playwright (bypassa captcha da Amazon com navegador real)
+    try:
+        from playwright.sync_api import sync_playwright
+        from .mercadolivre import _abrir_contexto, tem_sessao
+
+        if tem_sessao():
+            with sync_playwright() as pw:
+                ctx = _abrir_contexto(pw, headless=True)
+                page = ctx.new_page()
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    try:
+                        page.wait_for_selector("#productTitle, #landingImage", timeout=4000)
+                    except Exception:
+                        pass
+                    return _parse_detalhes_html(page.content())
+                finally:
+                    ctx.close()
+    except Exception as e:
+        log.warning("Fallback Playwright na Amazon falhou: %s", e)
+
+    return None, None, None, None, None, None
